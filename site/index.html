@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..800&family=Fraunces:opsz,wght@9..144,500..700&display=swap">
-<link rel="stylesheet" href="/styles.css?v=1">
+<link rel="stylesheet" href="/styles.css?v=2">
 <!--NAVOO_HEAD-->
 </head>
 <body>
@@ -43,6 +43,8 @@
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
     <symbol id="i-signal" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx=".8"/><rect x="5" y="5.5" width="3" height="6.5" rx=".8"/><rect x="10" y="3" width="3" height="9" rx=".8"/><rect x="15" y="0" width="3" height="12" rx=".8"/></symbol>
     <symbol id="i-battery" viewBox="0 0 26 12"><rect x=".5" y=".5" width="22" height="11" rx="3" fill="none" stroke="currentColor"/><rect x="2.5" y="2.5" width="18" height="7" rx="1.5"/><rect x="24" y="4" width="1.8" height="4" rx=".9"/></symbol>
@@ -195,7 +197,7 @@
           <li><b class="c-green"><svg><use href="#i-target"/></svg></b>Daily Micro-Changes</li>
           <li><b class="c-orange"><svg><use href="#i-home"/></svg></b>Environment Nudges</li>
           <li><b class="c-purple"><svg><use href="#i-chat"/></svg></b>On-Demand Support</li>
-          <li><b class="c-blue"><svg><use href="#i-chart"/></svg></b>Track Your Progress</li>
+          <li><b class="c-teal"><svg><use href="#i-chart"/></svg></b>Track Your Progress</li>
         </ul>
         <div class="plan-week"><div>This week <span>4 of 5</span></div><i><b></b></i></div>
       </div>
@@ -217,7 +219,7 @@
       <p class="about-intro">Navoo is an AI behaviour change coach that combines behavioural science with personalised support to help you build healthier habits and achieve your goals in real life.</p>
       <h2 class="about-h">AI coaching app to help you build healthier habits <span>with behavioural science.</span></h2>
       <p class="about-sub">Navoo gives you personalised guidance, practical tools and ongoing support to help you build habits that actually stick.</p>
-      <a href="#waitlist" class="btn btn-blue btn-lg" data-goto="waitlist">Join the Waitlist <svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a href="#waitlist" class="btn btn-rose btn-lg" data-goto="waitlist">Join the Waitlist <svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></a>
     </div>
   </div>
   <div class="container">
@@ -226,7 +228,7 @@
       <li><span class="f-ico c-green"><svg><use href="#i-target"/></svg></span><strong>Daily Micro-Changes</strong><span>You get one small, doable step at a time.</span></li>
       <li><span class="f-ico c-orange"><svg><use href="#i-home"/></svg></span><strong>Environment Nudges</strong><span>You’ll learn simple physical nudges to make healthier choices easier.</span></li>
       <li><span class="f-ico c-purple"><svg><use href="#i-chat"/></svg></span><strong>Coach in Your Pocket</strong><span>You can chat anytime when real life happens and get a new plan.</span></li>
-      <li><span class="f-ico c-blue"><svg><use href="#i-chart"/></svg></span><strong>Track Your Progress</strong><span>You see what’s working and keep building momentum.</span></li>
+      <li><span class="f-ico c-teal"><svg><use href="#i-chart"/></svg></span><strong>Track Your Progress</strong><span>You see what’s working and keep building momentum.</span></li>
     </ul>
   </div>
 </section>
@@ -259,6 +261,39 @@
   </div>
 </footer>
 
-<script type="module" src="/app.js?v=1"></script>
+
+<dialog class="report-modal" id="reportModal" aria-labelledby="rmTitle">
+  <div class="rm-inner">
+    <button class="rm-close" type="button" id="rmClose" aria-label="Close"><svg><use href="#i-x"/></svg></button>
+    <div id="rmStart">
+      <div class="rm-badge"><svg><use href="#i-doc"/></svg></div>
+      <p class="rm-eyebrow">Quiz complete</p>
+      <h2 class="rm-title serif" id="rmTitle">Your full report is ready</h2>
+      <p class="rm-sub">Enter your name and email to download your personalised report. We’ll also send a copy to your inbox.</p>
+      <div class="rm-focus" id="rmFocus" hidden><svg><use href="#i-target"/></svg><div><strong>Your 30-day focus</strong><span id="rmFocusText"></span></div></div>
+      <form class="rm-form" id="rmForm" novalidate>
+        <label>First name<input name="name" type="text" autocomplete="given-name" autocapitalize="words" placeholder="Your first name" maxlength="30" required></label>
+        <label>Email address<input name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" required></label>
+        <input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <button class="btn btn-rose btn-lg" type="submit"><span class="btn-label">See my Free Report</span> <svg class="ico" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        <p class="form-msg" role="status" aria-live="polite"></p>
+      </form>
+      <div class="rm-trust"><span><svg><use href="#i-lock"/></svg>Private &amp; secure</span><span><svg><use href="#i-check"/></svg>100% free</span><span><svg><use href="#i-doc"/></svg>5-page PDF</span></div>
+      <p class="rm-fine">You’ll also get Navoo launch updates. Unsubscribe anytime. <a href="/privacy" target="_blank" rel="noopener">Privacy</a></p>
+    </div>
+    <div class="rm-done" id="rmDone" hidden>
+      <div class="rm-badge"><svg><use href="#i-check"/></svg></div>
+      <h2 class="rm-title serif">Your report is on its way!</h2>
+      <p class="rm-sub" id="rmDoneText">It’s downloading now and opening in a new tab.</p>
+      <div class="rm-actions">
+        <a class="btn btn-rose btn-lg" id="rmOpen" href="#" target="_blank" rel="noopener">Open my report <svg class="ico"><use href="#i-arrow"/></svg></a>
+        <a class="btn btn-ghost btn-md" id="rmDl" href="#" download><svg class="ico"><use href="#i-download"/></svg> Download again</a>
+        <button class="link-btn" type="button" id="rmBack" style="justify-content:center">See my snapshot on the page</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<script type="module" src="/app.js?v=2"></script>
 </body>
 </html>
