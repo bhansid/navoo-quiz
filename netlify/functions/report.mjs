@@ -36,7 +36,7 @@ async function toSheet(payload) {
   if (!url) throw new Error('SHEETS_WEBHOOK_URL not configured');
   const r = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ secret: env('SHEETS_SECRET'), ...payload }), redirect: 'follow', signal: AbortSignal.timeout(20000),
+    body: JSON.stringify({ secret: env('SHEETS_SECRET'), ...payload }), redirect: 'follow', signal: AbortSignal.timeout(8000),
   });
   const text = await r.text();
   let out; try { out = JSON.parse(text); } catch { throw new Error('Sheet script returned non-JSON (check the deployment access is "Anyone"): ' + text.slice(0, 120)); }
@@ -114,15 +114,17 @@ export default async (req, context) => {
     const out = await toSheet({ row, pdf: pdfB64, filename, emailReport: !!pdfB64 });
     emailed = !!out.emailed; duplicate = !!out.duplicate;
   } catch (err) {
-    console.error('[sheet]', err.message);
-    if (!pdfB64) return json(502, { error: 'We couldn’t save your details just now. Please try again in a moment.' });
-    // Report still works: let them download it even if saving failed
+    // A timeout here usually means Google is still working (it keeps running after we stop waiting).
+    console.error('[sheet]', err.name === 'TimeoutError' ? 'timed out waiting for Apps Script (it continues in the background)' : err.message);
+    if (!pdfB64 && err.name !== 'TimeoutError') return json(502, { error: 'We couldn’t save your details just now. Please try again in a moment.' });
+    emailed = pdfB64 ? null : false; // unknown
   }
 
   const capi = metaLead(row, ip, ua).catch(err => console.error('[capi]', err.message));
   if (context && typeof context.waitUntil === 'function') context.waitUntil(capi); else await capi;
 
-  return json(200, { ok: true, duplicate, emailed, pdf: pdfB64, filename, focus: report ? report.focus.title : null });
+  // The visitor gets the PDF from /api/pdf, so it isn't sent back here
+  return json(200, { ok: true, duplicate, emailed, filename, focus: report ? report.focus.title : null });
 };
 
 export const config = { path: ['/api/report', '/api/waitlist'] };

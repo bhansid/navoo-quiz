@@ -37,13 +37,7 @@ function doPost(e) {
     const email = String(row.email || '').trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return out({ ok: false, error: 'invalid email' });
 
-    // Email first (outside the lock), so a slow send doesn't block other writes
-    let emailed = false, emailError = '';
-    if (SEND_EMAIL && body.emailReport && body.pdf) {
-      try { sendReport(email, row.name, row.focus, body.pdf, body.filename); emailed = true; }
-      catch (err) { emailError = String(err && err.message || err); }
-    }
-
+    let newRow = 0;
     const lock = LockService.getScriptLock();
     lock.waitLock(20000);
     try {
@@ -51,7 +45,7 @@ function doPost(e) {
       const now = new Date();
       const a = row.answers || {};
       const values = {
-        created_at: now, email: email, emailed: emailed ? 'yes' : (emailError ? 'failed: ' + emailError.slice(0, 80) : 'no'),
+        created_at: now, email: email, emailed: (SEND_EMAIL && body.emailReport) ? 'sending' : 'no',
         q_goal: a.goal, q_domain: a.domain, q_moment: a.moment, q_barrier: a.barrier, q_pattern: a.pattern, q_helper: a.helper, q_recovery: a.recovery,
         repeat_count: 1, last_seen: now,
       };
@@ -67,8 +61,17 @@ function doPost(e) {
         }
       }
       sheet.appendRow(COLUMNS.map(function (c) { var k = c[0]; return k in values ? safe(values[k]) : safe(row[k]); }));
-      return out({ ok: true, duplicate: false, emailed: emailed });
+      newRow = sheet.getLastRow();
     } finally { lock.releaseLock(); }
+
+    // Then email the PDF and record the result on the row
+    let emailed = false, emailError = '';
+    if (SEND_EMAIL && body.emailReport && body.pdf) {
+      try { sendReport(email, row.name, row.focus, body.pdf, body.filename); emailed = true; }
+      catch (err) { emailError = String(err && err.message || err); }
+      getSheet().getRange(newRow, colIndex('emailed')).setValue(emailed ? 'yes' : 'failed: ' + emailError.slice(0, 80));
+    }
+    return out({ ok: true, duplicate: false, emailed: emailed });
   } catch (err) {
     return out({ ok: false, error: String(err && err.message || err) });
   }

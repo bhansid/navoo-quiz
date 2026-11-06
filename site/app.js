@@ -104,67 +104,55 @@ async function post(url, payload) {
 function invalid(input, msgEl, text) { input.setAttribute('aria-invalid', 'true'); msgEl.textContent = text; input.focus(); }
 $$('input').forEach(i => i.addEventListener('input', () => { i.removeAttribute('aria-invalid'); const m = i.form && i.form.querySelector('.form-msg'); if (m) m.textContent = ''; }));
 
-/* ---------- Report: shared by the popup and the on-page form ---------- */
+/* ---------- Report: shared by the popup and the on-page form ----------
+   The PDF has its own link (/api/pdf). On the click we open that link in a new tab
+   immediately (so no browser blocks it) and start a download. Saving to the Sheet and
+   emailing run separately, so they can never stop the report from loading. */
 let pdfUrl = null, pdfName = 'Navoo-report.pdf';
-function b64ToUrl(b64) {
-  const bin = atob(b64), bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-  pdfUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-  return pdfUrl;
-}
-function downloadPdf() {
-  const a = document.createElement('a'); a.href = pdfUrl; a.download = pdfName; a.rel = 'noopener';
+const pdfLink = (name, dl) => '/api/pdf?a=' + QUESTIONS.map(q => answers[q.id]).join('.') + '&n=' + encodeURIComponent(name || '') + (dl ? '&dl=1' : '');
+function downloadPdf(url) {
+  const a = document.createElement('a'); a.href = url || pdfLink(sget('navoo_name'), true); a.download = pdfName; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
 }
-// The new tab is opened straight away on the click (so browsers don't block it), then pointed at the PDF once it's ready.
-function openPlaceholderTab() {
-  let w = null;
-  try { w = window.open('', '_blank'); } catch {}
-  if (w) {
-    try {
-      w.document.write('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your Navoo report</title><body style="margin:0;display:grid;place-items:center;min-height:100vh;font-family:system-ui,sans-serif;background:#FCF1EE;color:#0B3C41"><p style="font-size:18px">Preparing your personalised report…</p></body>');
-      w.document.close();
-    } catch {}
-  }
-  return w;
-}
-function fillReportLinks(res, email) {
-  pdfName = res.filename || 'Navoo-report.pdf';
-  ['#dlBtn', '#rmDl'].forEach(sel => { const a = $(sel); a.href = pdfUrl; a.download = pdfName; });
+function fillReportLinks(name, email, emailed) {
+  pdfName = 'Navoo-report' + (name ? '-' + name.replace(/[^A-Za-z0-9-]/g, '') : '') + '.pdf';
+  pdfUrl = pdfLink(name, false);
+  const dl = pdfLink(name, true);
+  ['#dlBtn', '#rmDl'].forEach(sel => { const a = $(sel); a.href = dl; a.download = pdfName; });
   $('#rmOpen').href = pdfUrl;
-  $('#doneText').textContent = res.emailed ? `Download it below. We’ve also emailed a copy to ${email}.` : 'Download it below and keep it handy for the next 30 days.';
-  $('#rmDoneText').textContent = res.emailed ? `It’s downloading now and opening in a new tab. We’ve also sent a copy to ${email}.` : 'It’s downloading now and opening in a new tab.';
+  const mailNote = emailed === false ? '' : ` We’re also emailing a copy to ${email}.`;
+  $('#doneText').textContent = 'Your report has opened in a new tab. You can download it again below.' + mailNote;
+  $('#rmDoneText').textContent = 'It’s opening in a new tab and downloading now.' + mailNote;
   $('#reportForm').hidden = true; $('#reportDone').hidden = false;
 }
-async function requestReport({ name, email, company, where, btn, label, idleText, msg }) {
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function requestReport({ name, email, company, where, msg }) {
   if (!validateAnswers(answers)) { msg.textContent = 'Please complete the quiz first.'; return false; }
-  const tab = openPlaceholderTab();
-  const p = { ...base(where), name, email, answers, company };
-  btn.disabled = true; label.textContent = 'Creating your report…';
-  try {
-    const res = await post('/api/report', p);
-    if (!res.pdf) throw new Error('Something went wrong. Please try again.');
-    b64ToUrl(res.pdf);
-    track(p.event_id, where, 'report'); push({ event: 'report_requested', event_id: p.event_id, form_location: where });
-    fillReportLinks(res, email);
-    downloadPdf();
-    if (tab && !tab.closed) { try { tab.location.href = pdfUrl; } catch { tab.close(); } }
-    sset('navoo_email', email); sset('navoo_name', name); sset('navoo_reported', 1); setWaitlistLabel();
-    return res;
-  } catch (err) {
-    if (tab && !tab.closed) tab.close();
-    msg.textContent = err.message; return false;
-  } finally { btn.disabled = false; label.textContent = idleText; }
+  const event_id = uuid();
+  // 1. Open the PDF right now, inside the click (new tab), and download a copy
+  const tab = window.open(pdfLink(name, false), '_blank');
+  try { if (tab) tab.opener = null; } catch {}
+  // iOS Safari switches to the new tab and shows the PDF there with its own Save/Share button,
+  // so a second automatic download would just interrupt it.
+  if (!isIOS || !tab) setTimeout(() => downloadPdf(pdfLink(name, true)), tab ? 400 : 0);
+  // 2. Save + email in the background (keepalive lets it finish even if the page changes)
+  const p = { ...base(where), event_id, name, email, answers, company };
+  fetch('/api/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p), keepalive: true })
+    .then(r => r.json().catch(() => ({}))).then(res => { if (res && res.emailed === false && !res.ok) fillReportLinks(name, email, false); })
+    .catch(() => {});
+  track(event_id, where, 'report'); push({ event: 'report_requested', event_id, form_location: where });
+  fillReportLinks(name, email, true);
+  sset('navoo_email', email); sset('navoo_name', name); sset('navoo_reported', 1); setWaitlistLabel();
+  return true;
 }
 
-$('#reportForm').addEventListener('submit', async e => {
+$('#reportForm').addEventListener('submit', e => {
   e.preventDefault();
   const f = e.currentTarget, msg = f.querySelector('.form-msg'), btn = f.querySelector('button');
   const name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
   if (!name) return invalid(f.name, msg, 'Please enter your first name.');
   if (!EMAIL_RE.test(email)) return invalid(f.email, msg, 'Please enter a valid email address.');
-  await requestReport({ name, email, company: f.company.value, where: 'report_band', btn, label: btn.querySelector('.btn-label'), idleText: 'Send me my full report', msg });
+  requestReport({ name, email, company: f.company.value, where: 'report_band', msg });
 });
 
 /* ---------- Popup ---------- */
@@ -192,13 +180,13 @@ modal.addEventListener('close', () => {
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); }); // tap outside the box
 $('#rmClose').addEventListener('click', closeModal);
 $('#rmBack').addEventListener('click', closeModal);
-$('#rmForm').addEventListener('submit', async e => {
+$('#rmForm').addEventListener('submit', e => {
   e.preventDefault();
   const f = e.currentTarget, msg = f.querySelector('.form-msg'), btn = f.querySelector('button');
   const name = f.name.value.trim(), email = f.email.value.trim().toLowerCase();
   if (!name) return invalid(f.name, msg, 'Please enter your first name.');
   if (!EMAIL_RE.test(email)) return invalid(f.email, msg, 'Please enter a valid email address.');
-  const ok = await requestReport({ name, email, company: f.company.value, where: 'popup', btn, label: btn.querySelector('.btn-label'), idleText: 'See my Free Report', msg });
+  const ok = requestReport({ name, email, company: f.company.value, where: 'popup', msg });
   if (ok) { $('#rmStart').hidden = true; $('#rmDone').hidden = false; }
 });
 
@@ -220,7 +208,7 @@ $('#wlForm').addEventListener('submit', async e => {
     if (!res.duplicate) track(p.event_id, 'waitlist', withReport ? 'report' : 'waitlist');
     push({ event: 'waitlist_signup', event_id: p.event_id, duplicate: !!res.duplicate });
     f.outerHTML = `<p class="wl-done"><svg style="width:20px;height:20px"><use href="#i-check"/></svg>${res.duplicate ? 'You’re already on the list. We’ll be in touch!' : res.emailed ? 'You’re on the list! Your report is on its way to your inbox.' : 'You’re on the list! We’ll keep you posted.'}</p>`;
-    if (res.pdf) { b64ToUrl(res.pdf); fillReportLinks(res, email); downloadPdf(); }
+    if (withReport && p.name) { fillReportLinks(p.name, email, res.emailed !== false); }
   } catch (err) { msg.textContent = err.message; btn.disabled = false; label.textContent = old; }
 });
 
@@ -270,3 +258,4 @@ const yr = $('#yr'); if (yr) yr.textContent = new Date().getFullYear();
 const firstUnanswered = QUESTIONS.findIndex(q => !answers[q.id]);
 if (firstUnanswered === -1 && validateAnswers(answers)) { renderQ(QUESTIONS.length - 1, false); finishQuiz(false); }
 else renderQ(Math.max(0, firstUnanswered), false);
+if (sget('navoo_reported') && validateAnswers(answers)) fillReportLinks(sget('navoo_name') || '', sget('navoo_email') || '', true);
