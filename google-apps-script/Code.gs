@@ -64,6 +64,8 @@ function doPost(e) {
       newRow = sheet.getLastRow();
     } finally { lock.releaseLock(); }
 
+    addToMasterList(email, row.name, masterSource_(row.type));
+
     // Then email the PDF and record the result on the row
     let emailed = false, emailError = '';
     if (SEND_EMAIL && body.emailReport && body.pdf) {
@@ -116,3 +118,64 @@ function out(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).
 
 // Run once from the editor: creates the sheet and asks for permission to send email.
 function setup() { getSheet(); Logger.log('Emails left today: ' + MailApp.getRemainingDailyQuota()); }
+
+/* ===================== Master email list (Meta audience) =====================
+ * Every new lead is also added to the shared "navoo Meta Email List" sheet,
+ * in the same format as the existing rows (Email, Email Marketing Consent),
+ * plus where it came from, first name and date. Emails already on the list are skipped.
+ */
+const MASTER_LIST_ID = '1_mYvpv2yuki2wAOcX-hgByBf3s3QY4tUZDGSvHt8aFg';
+const MASTER_LIST_TAB = 'Meta ';
+const MASTER_HEADERS = ['Email', 'Email Marketing Consent', 'Source', 'First name', 'Date added'];
+
+function masterSheet_() {
+  const ss = SpreadsheetApp.openById(MASTER_LIST_ID);
+  const sh = ss.getSheetByName(MASTER_LIST_TAB) || ss.getSheets()[0];
+  const head = sh.getRange(1, 1, 1, MASTER_HEADERS.length).getValues()[0];
+  if (!head[2] && !head[3] && !head[4]) sh.getRange(1, 3, 1, 3).setValues([MASTER_HEADERS.slice(2)]).setFontWeight('bold');
+  return sh;
+}
+
+// Adds one lead. Never throws, so a problem here can't stop a sign-up being saved.
+function addToMasterList(email, name, source) {
+  try {
+    email = String(email || '').trim().toLowerCase();
+    if (!email) return;
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const sh = masterSheet_();
+      const last = sh.getLastRow();
+      if (last > 1) {
+        const hit = sh.getRange(2, 1, last - 1, 1).createTextFinder(email).matchEntireCell(true).matchCase(false).findNext();
+        if (hit) return;
+      }
+      sh.appendRow([email, 'Subscribed', source, safe(name || ''), new Date()]);
+    } finally { lock.releaseLock(); }
+  } catch (err) {
+    console.error('Master list: ' + (err && err.message || err));
+  }
+}
+
+// Run once from the editor: copies every lead already in this sheet into the master list.
+function backfillMasterList() {
+  const own = getSheet();
+  const rows = own.getDataRange().getValues();
+  const head = rows.shift().map(function (h) { return String(h).toLowerCase(); });
+  const ei = head.indexOf('email'), ni = head.indexOf('first name'), ti = head.indexOf('type');
+  if (ei < 0) throw new Error('No Email column found in ' + own.getName());
+  const sh = masterSheet_();
+  const existing = new Set(sh.getRange(1, 1, Math.max(1, sh.getLastRow()), 1).getValues().map(function (r) { return String(r[0]).trim().toLowerCase(); }));
+  const add = [];
+  rows.forEach(function (r) {
+    const email = String(r[ei] || '').trim().toLowerCase();
+    if (!email || existing.has(email)) return;
+    existing.add(email);
+    const type = ti >= 0 ? String(r[ti]) : '';
+    add.push([email, 'Subscribed', masterSource_(type), ni >= 0 ? safe(r[ni]) : '', new Date()]);
+  });
+  if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, 5).setValues(add);
+  Logger.log('Added ' + add.length + ' new emails to the master list.');
+}
+
+function masterSource_(type) { return type === 'waitlist' ? 'land.navoo.ai waitlist' : 'land.navoo.ai quiz'; }
