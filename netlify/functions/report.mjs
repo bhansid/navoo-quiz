@@ -31,6 +31,23 @@ function limited(ip) {
 
 const answerText = a => Object.fromEntries(QUESTIONS.map(q => [q.id, (q.options.find(o => o.id === a[q.id]) || {}).text || '']));
 
+/* Also add the lead to the shared Navoo email list (Google Sheet), if configured.
+ * Env: LEADS_WEBHOOK_URL (the list's Apps Script /exec URL), LEADS_SECRET. Never throws. */
+async function addToLeadsList(email, name, source) {
+  const url = env('LEADS_WEBHOOK_URL');
+  if (!url) return 'off';
+  try {
+    const r = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, redirect: 'follow',
+      body: JSON.stringify({ secret: env('LEADS_SECRET'), email, name: name || '', source }),
+      signal: AbortSignal.timeout(7000),
+    });
+    const out = await r.json().catch(() => ({}));
+    if (!out.ok) console.error('[leads list]', out.error || 'HTTP ' + r.status);
+    return out.ok ? 'ok' : 'error';
+  } catch (err) { console.error('[leads list]', err.message); return 'error'; }
+}
+
 async function toSheet(payload) {
   const url = env('SHEETS_WEBHOOK_URL');
   if (!url) throw new Error('SHEETS_WEBHOOK_URL not configured');
@@ -108,6 +125,10 @@ export default async (req, context) => {
     });
   }
 
+  // Add to the shared email list in parallel with saving
+  const listed = addToLeadsList(row.email, row.name, isReport ? 'land.navoo.ai quiz' : 'land.navoo.ai waitlist');
+  if (context && typeof context.waitUntil === 'function') context.waitUntil(listed);
+
   // Save + email (via Apps Script). Saving must succeed; the email is best-effort inside the script.
   let emailed = false, duplicate = false;
   try {
@@ -124,6 +145,7 @@ export default async (req, context) => {
   if (context && typeof context.waitUntil === 'function') context.waitUntil(capi); else await capi;
 
   // The visitor gets the PDF from /api/pdf, so it isn't sent back here
+  if (!(context && typeof context.waitUntil === 'function')) await listed;
   return json(200, { ok: true, duplicate, emailed, filename, focus: report ? report.focus.title : null });
 };
 
